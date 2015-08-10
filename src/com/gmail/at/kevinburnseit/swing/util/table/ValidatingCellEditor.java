@@ -1,37 +1,12 @@
-/*
- * This file is based on a static package-private class in JTable. As such, this file is 
- * distributed under GPL2 with classpath exception. Oracle's original copyright notice is 
- * listed here:
- * 
- * Copyright (c) 1997, 2010, Oracle and/or its affiliates. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
- *
- * This code is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
- *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
- *
- * You should have received a copy of the GNU General Public License version
- * 2 along with this work; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
- *
- * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
- * or visit www.oracle.com if you need additional information or have any
- * questions.
- */
 package com.gmail.at.kevinburnseit.swing.util.table;
 
 import java.awt.Color;
+import java.awt.Component;
 import java.util.ArrayList;
 
+import javax.swing.DefaultCellEditor;
 import javax.swing.JComponent;
+import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.border.Border;
 import javax.swing.border.LineBorder;
@@ -43,21 +18,23 @@ import javax.swing.border.LineBorder;
  * @author Kevin J. Burns
  *
  */
-public abstract class ValidatingCellEditor extends GenericEditor {
+public abstract class ValidatingCellEditor extends DefaultCellEditor {
     /**
 	 * 
 	 */
 	private static final long serialVersionUID = 7951386012340703301L;
     private static final Border errorBorder = new LineBorder(Color.RED);
+    private static final Border normalBorder = new LineBorder(Color.black);
     private static int defaultHorizontalAlignment = JTextField.LEADING;
     private ArrayList<CellValidationErrorListener> errorListeners = new ArrayList<>();
     private boolean numeric = false;
+    protected Object value;
     
     /**
      * Sole constructor. Creates a validating table cell editor.
      */
     public ValidatingCellEditor() {
-        super();
+        super(new JTextField());
     }
     
     /**
@@ -77,19 +54,40 @@ public abstract class ValidatingCellEditor extends GenericEditor {
     }
 
     @Override
-    public boolean stopCellEditing() {
-    	if (!super.stopCellEditing()) return false;
-    	
-    	if (!this.performValidation(this.value)) {
+    final public boolean stopCellEditing() {
+    	this.value = (String)super.getCellEditorValue();
+		try {
+	    	this.updateValue((String)this.value);
+	    	boolean ok;
+			ok = this.performValidation(this.value);
+			if (!ok) throw new Exception();
+		} 
+		catch (Exception e) {
     		this.setCellBorder(ValidatingCellEditor.errorBorder);
     		this.fireValidationFailed();
     		return false;
-    	}
+		}
     	
-    	return true;
+		return super.stopCellEditing();
     }
 
-    private void fireValidationFailed() {
+    @Override
+	public Component getTableCellEditorComponent(JTable table, Object val,
+			boolean isSelected, int row, int column) {
+    	this.setCellBorder(normalBorder);
+		return super.getTableCellEditorComponent(table, val, isSelected, row, column);
+	}
+
+	/**
+     * Derived classes must convert the string to an object consistent with the derived 
+     * class.  The object must be stored in
+     * the member variable <code>value</code>. If the conversion process proves 
+     * problematic, throw an exception.
+     * @throws Exception
+     */
+    protected abstract void updateValue(String txt) throws Exception;
+
+	private void fireValidationFailed() {
     	for (CellValidationErrorListener l : this.errorListeners) {
     		l.validationFailed();
     	}
@@ -97,10 +95,12 @@ public abstract class ValidatingCellEditor extends GenericEditor {
 
     /**
      * This function is called when it is necessary to validate a table cell.
-     * @param value The value to validate
+     * @param v The value to validate. Assuming {@link #updateValue(String)} has been
+     * executed correctly, derived classes should be able to directly cast this parameter
+     * into the expected object type.
      * @return <code>true</code> if the value is OK; <code>false</code> otherwise.
      */
-	protected abstract boolean performValidation(Object value);
+	protected abstract boolean performValidation(Object v);
 
 	/**
 	 * @param newBorder 
@@ -136,5 +136,10 @@ public abstract class ValidatingCellEditor extends GenericEditor {
 		this.setHorizontalAlignment(this.numeric ? 
 				JTextField.RIGHT : 
 				ValidatingCellEditor.defaultHorizontalAlignment);
+	}
+
+	@Override
+	public Object getCellEditorValue() {
+		return this.value;
 	}
 }
